@@ -1,8 +1,6 @@
 #include "PE_Headers.h"
 #pragma comment(linker , "/HEAP:600000000")
 
-
-
 int main() {
 
 	ULONGLONG BigByte64;
@@ -73,29 +71,45 @@ int main() {
 			DWORD RawLibName = RvaToRaw(pImportDescriptor->Name, PeHeader.NumberOfSections, pSectionHeaders);
 			char* LibName = (char*)&Buffer[RawLibName];
 			ToConsole("\t", Colors::Yellow); ToConsole(LibName, Colors::Yellow); ToConsole(":\n", Colors::Yellow);
-			
-			DWORD RawINT = RvaToRaw(pImportDescriptor->OriginalFirstThunk, PeHeader.NumberOfSections, pSectionHeaders);
-			IMAGE_THUNK_DATA32* pImageThunkData32 = (IMAGE_THUNK_DATA32*)&Buffer[RawINT];
-			while (TRUE) {
-				if (pImageThunkData32->u1.AddressOfData == 0) break;
-				if ((pImageThunkData32->u1.AddressOfData) && BigByte32) {
-					ToConsole("\t\tImportByNumber: ", Colors::Blue);
-					ULONGLONG Index = (pImageThunkData32->u1.AddressOfData) & (BigByte32 - 1);
-					ToConsole(Index, Colors::Grey, TRUE);
-					ToConsole("\n", Colors::Grey);
-					pImageThunkData32++;
-					continue;
-				}
-				DWORD RawAdressToImportByName = RvaToRaw(pImageThunkData32->u1.AddressOfData, PeHeader.NumberOfSections, pSectionHeaders);
-				IMAGE_IMPORT_BY_NAME* CurrImportByName = (IMAGE_IMPORT_BY_NAME*)&Buffer[RawAdressToImportByName];
-				ToConsole("\t\t", Colors::Grey); ToConsole(CurrImportByName->Name, Colors::Grey); ToConsole("\n", Colors::Grey);
-				pImageThunkData32++;
-			}
 
+			if (pImportDescriptor->OriginalFirstThunk == 0) {
+				DWORD RawIAT = RvaToRaw(pImportDescriptor->FirstThunk, PeHeader.NumberOfSections, pSectionHeaders);
+				IMAGE_THUNK_DATA32* pImageThunkData32 = (IMAGE_THUNK_DATA32*)&Buffer[RawIAT];
+				while (TRUE) {
+					if (pImageThunkData32->u1.AddressOfData == 0) break;
+					DWORD RawToFunctionName = RvaToRaw(pImageThunkData32->u1.AddressOfData, PeHeader.NumberOfSections, pSectionHeaders);
+					char* tmpPtrToFuncName = (char*)&Buffer[RawToFunctionName];
+					char* FuncName;
+					while (*tmpPtrToFuncName == 0) tmpPtrToFuncName++;
+					FuncName = tmpPtrToFuncName;
+					ToConsole("\t\t", Colors::Grey); ToConsole(FuncName, Colors::Grey); ToConsole("\n", Colors::Grey);
+					++pImageThunkData32;
+				}
+			}
+			else {
+				DWORD RawINT = RvaToRaw(pImportDescriptor->OriginalFirstThunk, PeHeader.NumberOfSections, pSectionHeaders);
+				IMAGE_THUNK_DATA32* pImageThunkData32 = (IMAGE_THUNK_DATA32*)&Buffer[RawINT];
+				while (TRUE) {
+					if (pImageThunkData32->u1.AddressOfData == 0) break;
+					if ((pImageThunkData32->u1.AddressOfData) & BigByte32) {
+						ToConsole("\t\tImportByNumber: ", Colors::Blue);
+						ULONGLONG Index = (pImageThunkData32->u1.AddressOfData) & (BigByte32 - 1);
+						ToConsole(Index, Colors::Grey, TRUE);
+						ToConsole("\n", Colors::Grey);
+						pImageThunkData32++;
+						continue;
+					}
+					DWORD RawAdressToImportByName = RvaToRaw(pImageThunkData32->u1.AddressOfData, PeHeader.NumberOfSections, pSectionHeaders);
+					IMAGE_IMPORT_BY_NAME* CurrImportByName = (IMAGE_IMPORT_BY_NAME*)&Buffer[RawAdressToImportByName];
+					ToConsole("\t\t", Colors::Grey); ToConsole(CurrImportByName->Name, Colors::Grey); ToConsole("\n", Colors::Grey);
+					pImageThunkData32++;
+				}
+			}
 			ToConsole("\n\n", Colors::Yellow);
 			pImportDescriptor++;
 		}
 		delete[] pSectionHeaders;
+		ToConsole("---------------------------------------------------\n\n", Colors::Red);
 	}
 
 
@@ -126,31 +140,48 @@ int main() {
 			char* LibName = (char*)&Buffer[RawLibName];
 			ToConsole("\t", Colors::Yellow); ToConsole(LibName, Colors::Yellow); ToConsole(":\n", Colors::Yellow);
 
-
-			DWORD RawINT = RvaToRaw(pImportDescriptor->OriginalFirstThunk, PeHeader.NumberOfSections, pSectionHeaders);
-			IMAGE_THUNK_DATA64* pImageThunkData64 = (IMAGE_THUNK_DATA64*)&Buffer[RawINT];
-			while (TRUE) {
-				if (pImageThunkData64->u1.AddressOfData == 0) break;
-				if (((pImageThunkData64->u1.AddressOfData) & BigByte64) != 0 ) {
-					ToConsole("\t\tImportByNumber: ", Colors::Blue);
-					ULONGLONG Index = (pImageThunkData64->u1.AddressOfData) & (BigByte64 - 1);
-					ToConsole(Index, Colors::Grey, TRUE); 
-					ToConsole("\n", Colors::Grey);
-					pImageThunkData64++;
-					continue;
+			if (pImportDescriptor->OriginalFirstThunk == 0) {
+				DWORD RawIAT = RvaToRaw(pImportDescriptor->FirstThunk, PeHeader.NumberOfSections, pSectionHeaders);
+				IMAGE_THUNK_DATA64* pImageThunkData64 = (IMAGE_THUNK_DATA64*)&Buffer[RawIAT];
+				while (TRUE) {
+					if (pImageThunkData64->u1.AddressOfData == 0) break;
+					DWORD RawToFunctionName = RvaToRaw(pImageThunkData64->u1.AddressOfData, PeHeader.NumberOfSections, pSectionHeaders);
+					char* tmpPtrToFuncName = (char*)&Buffer[RawToFunctionName];
+					char* FuncName;
+					while (*tmpPtrToFuncName == 0) tmpPtrToFuncName++;
+					FuncName = tmpPtrToFuncName;
+					ToConsole("\t\t", Colors::Grey); ToConsole(FuncName, Colors::Grey); ToConsole("\n", Colors::Grey);
+					++pImageThunkData64;
 				}
-				DWORD RawAdressToImportByName = RvaToRaw(pImageThunkData64->u1.AddressOfData, PeHeader.NumberOfSections, pSectionHeaders);
-				IMAGE_IMPORT_BY_NAME* CurrImportByName = (IMAGE_IMPORT_BY_NAME*)&Buffer[RawAdressToImportByName];
-				ToConsole("\t\t", Colors::Grey); ToConsole(CurrImportByName->Name, Colors::Grey); ToConsole("\n", Colors::Grey);
-				pImageThunkData64++;
 			}
-
+			else {
+				DWORD RawINT = RvaToRaw(pImportDescriptor->OriginalFirstThunk, PeHeader.NumberOfSections, pSectionHeaders);
+				IMAGE_THUNK_DATA64* pImageThunkData64 = (IMAGE_THUNK_DATA64*)&Buffer[RawINT];
+				while (TRUE) {
+					if (pImageThunkData64->u1.AddressOfData == 0) break;
+					if ((pImageThunkData64->u1.AddressOfData) & BigByte64) {
+						ToConsole("\t\tImportByNumber: ", Colors::Blue);
+						ULONGLONG Index = (pImageThunkData64->u1.AddressOfData) & (BigByte64 - 1);
+						ToConsole(Index, Colors::Grey, TRUE);
+						ToConsole("\n", Colors::Grey);
+						pImageThunkData64++;
+						continue;
+					}
+					DWORD RawAdressToImportByName = RvaToRaw(pImageThunkData64->u1.AddressOfData, PeHeader.NumberOfSections, pSectionHeaders);
+					IMAGE_IMPORT_BY_NAME* CurrImportByName = (IMAGE_IMPORT_BY_NAME*)&Buffer[RawAdressToImportByName];
+					ToConsole("\t\t", Colors::Grey); ToConsole(CurrImportByName->Name, Colors::Grey); ToConsole("\n", Colors::Grey);
+					pImageThunkData64++;
+				}
+			}
 			ToConsole("\n\n", Colors::Yellow);
 			pImportDescriptor++;
 		}
 		delete[] pSectionHeaders;
+		ToConsole("---------------------------------------------------\n\n", Colors::Red);
 	}
 
 	delete[] Buffer;
+	SetConsoleScreenBufferInfoEx(hStdOutput , &ScreenBufferInfo);
+	SetConsoleTextAttribute(hStdOutput, FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 	return 0;
 }

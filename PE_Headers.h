@@ -20,7 +20,7 @@ enum Colors {
 };
 
 HANDLE hStdOutput;
-CONSOLE_SCREEN_BUFFER_INFO ScreenBufferInfo;
+CONSOLE_SCREEN_BUFFER_INFOEX ScreenBufferInfo;
 WORD wOldCololorAttributes;
 
 
@@ -62,7 +62,7 @@ std::map<int, std::string> TypeCharacteristics = {
 
 void Init() {
 	hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-	GetConsoleScreenBufferInfo(hStdOutput, &ScreenBufferInfo);
+	GetConsoleScreenBufferInfoEx(hStdOutput, &ScreenBufferInfo);
 	wOldCololorAttributes = ScreenBufferInfo.wAttributes;
 
 	CONSOLE_FONT_INFOEX Font;
@@ -203,7 +203,7 @@ public:
 		}
 		}
 		ToConsole("\tNumberOfSections: ", Colors::Yellow); ToConsole(NumberOfSections, Colors::Grey, TRUE);
-		ToConsole("\n\tTimeDateStamp: ", Colors::Yellow);  ToConsole(TimeDateStamp, Colors::Grey);
+		ToConsole("\n\tTimeDateStamp: ", Colors::Yellow);  ToConsole(TimeDateStampToString(TimeDateStamp), Colors::Grey);
 		ToConsole("\n\tPointerToSymbolTable: ", Colors::Yellow); ToConsole(PointerToSymbolTable, Colors::Grey, TRUE);
 		ToConsole("\n\tNumberOfSymbols: ", Colors::Yellow); ToConsole(NumberOfSymbols, Colors::Grey, TRUE);
 		ToConsole("\n\tSizeOfOptionalHeader: ", Colors::Yellow); ToConsole(SizeOfOptionalHeader, Colors::Grey, TRUE);
@@ -232,7 +232,7 @@ public:
 	void print() {
 		gFileAlignment = this->FileAlignment;
 		gSectionAlignment = this->SectionAlignment;
-		ToConsole("OPTIONAL_HEADER : \n", Colors::Green);
+		ToConsole("OPTIONAL HEADER : \n", Colors::Green);
 		ToConsole("\tMagic: ", Colors::Yellow);
 		switch (Magic) {
 			case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
@@ -377,7 +377,7 @@ public:
 	void print() {
 		gFileAlignment = this->FileAlignment;
 		gSectionAlignment = this->SectionAlignment;
-		ToConsole("OPTIONAL_HEADER : \n", Colors::Green);
+		ToConsole("OPTIONAL HEADER : \n", Colors::Green);
 		ToConsole("\tMagic: ", Colors::Yellow);
 		switch (Magic) {
 			case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
