@@ -6,7 +6,11 @@
 #include <map>
 #include <string>
 #include <typeinfo>
+#include <vector>
+#include <delayimp.h>
 
+
+#pragma warning(disable:4996)
 #define ALIGN_DOWN(x, align)  (x & ~(align-1))
 #define ALIGN_UP(x, align)    ((x & (align-1))?ALIGN_DOWN(x,align)+align:x)
 
@@ -142,6 +146,7 @@ private:
 	PIMAGE_OPTIONAL_HEADER32 pOptionalHeader32 = NULL; PIMAGE_OPTIONAL_HEADER64 pOptionalHeader64 = NULL;
 	PIMAGE_SECTION_HEADER pSectionHeader = NULL; 
 	PIMAGE_EXPORT_DIRECTORY pExportDirectory = NULL;
+	PIMAGE_IMPORT_DESCRIPTOR pImportDescriptor = NULL;
 
 	std::map<int, std::string> FILE_HEADER_MACHINE = {
 		{0x14c , "IMAGE_FILE_MACHINE_I386"} ,
@@ -285,12 +290,18 @@ public:
 			if (pOptionalHeader32 -> DataDirectory[0].VirtualAddress != 0) {
 				pExportDirectory = PIMAGE_EXPORT_DIRECTORY(lpFile + RvaToRaw(pOptionalHeader32->DataDirectory[0].VirtualAddress));
 			}
+			if (pOptionalHeader32->DataDirectory[1].VirtualAddress) {
+				pImportDescriptor = PIMAGE_IMPORT_DESCRIPTOR(lpFile + RvaToRaw(pOptionalHeader32->DataDirectory[1].VirtualAddress));
+			}
 		}
 		else {
 			pOptionalHeader64 = PIMAGE_OPTIONAL_HEADER64(lpFile + pDosHeader->e_lfanew + 4 + sizeof(IMAGE_FILE_HEADER));
 			pSectionHeader = PIMAGE_SECTION_HEADER(lpFile + pDosHeader->e_lfanew + 4 + sizeof(IMAGE_FILE_HEADER) +  sizeof(IMAGE_OPTIONAL_HEADER64));
 			if (pOptionalHeader64->DataDirectory[0].VirtualAddress != 0) {
 				pExportDirectory = PIMAGE_EXPORT_DIRECTORY(lpFile + RvaToRaw(pOptionalHeader64->DataDirectory[0].VirtualAddress));
+			}
+			if (pOptionalHeader64->DataDirectory[1].VirtualAddress) {
+				pImportDescriptor = PIMAGE_IMPORT_DESCRIPTOR(lpFile + RvaToRaw(pOptionalHeader64->DataDirectory[1].VirtualAddress));
 			}
 		}
 	}
@@ -348,7 +359,7 @@ public:
 			cons.Print(Colors::Yellow); cons.Print("\n\tSizeOfUninitializedData: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->SizeOfUninitializedData);
 			cons.Print(Colors::Yellow); cons.Print("\n\tAddressOfEntryPoint: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->AddressOfEntryPoint);
 			cons.Print(Colors::Yellow); cons.Print("\n\tBaseOfCode: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->BaseOfCode);
-			cons.Print(Colors::Yellow); cons.Print("\n\tBaseOfData: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32 ->BaseOfData);
+			cons.Print(Colors::Yellow); cons.Print("\n\tBaseOfData: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->BaseOfData);
 			cons.Print(Colors::Yellow); cons.Print("\n\tImageBase: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->ImageBase);
 			cons.Print(Colors::Yellow); cons.Print("\n\tSectionAlignment: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->SectionAlignment);
 			cons.Print(Colors::Yellow); cons.Print("\n\tFileAlignment: "); cons.Print(Colors::Grey); cons.Print(std::hex); cons.Print("0x"); cons.Print(pOptionalHeader32->FileAlignment);
@@ -454,8 +465,8 @@ public:
 			LPDWORD lpOrdTable = LPDWORD(lpFile + RvaToRaw(pExportDirectory->AddressOfNameOrdinals));
 
 
-			for (UINT i = 0 ; i < pExportDirectory ->NumberOfNames ; ++i){
-				DWORD dwOrd =  i + pExportDirectory->Base;
+			for (UINT i = 0; i < pExportDirectory->NumberOfNames; ++i) {
+				DWORD dwOrd = i + pExportDirectory->Base;
 				cons.Print(Colors::Red); cons.Print("\t\t"); cons.Print((char*)(lpFile + RvaToRaw(lpNameTable[i]))); cons.Print(" : \n");
 				cons.Print(Colors::Yellow);  cons.Print("\t\t\tOrdinal: "); cons.Print(std::dec);  cons.Print(Colors::Grey);  cons.Print(dwOrd); cons.Print("\n");
 				cons.Print(Colors::Yellow);  cons.Print("\t\t\tAddress: "); cons.Print(std::hex);  cons.Print(Colors::Grey);
@@ -474,6 +485,137 @@ public:
 
 
 		//IMPORT
+		cons.Print(Colors::Green); cons.Print("IMPORT:\n");
+		if (pOptionalHeader64 == NULL) {
+			DWORD One = 1;
+			DWORD BigBit32 = One << 31;
+			while (TRUE) {
+				if (pImportDescriptor->Name == 0) break;
+				cons.Print(Colors::Yellow); cons.Print("\t"); cons.Print((char*)(lpFile + RvaToRaw(pImportDescriptor->Name))); cons.Print(":\n");
+				if (pImportDescriptor->TimeDateStamp == -1 && pImportDescriptor->ForwarderChain == -1) {
+					pImportDescriptor++;
+					continue;
+				}
+				PIMAGE_THUNK_DATA32 pDataForINT = NULL;  PIMAGE_THUNK_DATA32 pDataForIAT = NULL;
+				if (pImportDescriptor->OriginalFirstThunk != 0) {
+					pDataForINT = (PIMAGE_THUNK_DATA32)(lpFile + RvaToRaw(pImportDescriptor->OriginalFirstThunk));
+				}
 
+				if (pImportDescriptor->FirstThunk != 0) {
+					pDataForIAT = (PIMAGE_THUNK_DATA32)(lpFile + RvaToRaw(pImportDescriptor->FirstThunk));
+				}
+
+				if (pDataForINT != NULL) {
+					while (TRUE) {
+						if (pDataForINT->u1.AddressOfData == 0) break;
+						if ((pDataForINT->u1.AddressOfData & BigBit32) == BigBit32) {
+							cons.Print(Colors::Grey);  cons.Print("\t\tImport By Number: ");
+							DWORD nSymbol = (pDataForINT->u1.AddressOfData) & (~BigBit32);
+							cons.Print("0x");  cons.Print(nSymbol); cons.Print("\n");
+						}
+						else {
+							PIMAGE_IMPORT_BY_NAME pImportByName = (PIMAGE_IMPORT_BY_NAME)(lpFile + RvaToRaw(pDataForINT->u1.AddressOfData));
+							cons.Print("\t\t");  cons.Print(Colors::Grey); cons.Print(pImportByName->Name); cons.Print("\n");
+						}
+						pDataForINT++;
+					}
+				}
+				else if (pDataForIAT != NULL) {
+					while (TRUE) {
+						if (pDataForIAT->u1.AddressOfData == 0) break;
+						PIMAGE_IMPORT_BY_NAME pImportByName = PIMAGE_IMPORT_BY_NAME(lpFile + RvaToRaw(pDataForIAT->u1.AddressOfData));
+						cons.Print("\t\t"); cons.Print(Colors::Grey); cons.Print(pImportByName->Name); cons.Print("\n");
+						pDataForIAT++;
+					}
+				}
+				cons.Print("\n");
+				pImportDescriptor++;
+			}
+			if (pOptionalHeader32->DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].Size != 0) {
+				cons.Print(Colors::Green); cons.Print("DELAY_IMPORT:\n");
+				for (ImgDelayDescr* pDelayDesc = (ImgDelayDescr*)(lpFile + RvaToRaw(pOptionalHeader32->DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].VirtualAddress)); pDelayDesc->rvaDLLName != 0; pDelayDesc++) {
+					cons.Print(Colors::Yellow); cons.Print("\t"); cons.Print((char*)(lpFile + RvaToRaw(pDelayDesc->rvaDLLName))); cons.Print("\n");
+					IMAGE_THUNK_DATA* pINT = (IMAGE_THUNK_DATA*)(lpFile + RvaToRaw(pDelayDesc->rvaINT));
+					while (TRUE) {
+						if (pINT->u1.AddressOfData == 0) break;
+						if ((pINT->u1.AddressOfData & BigBit32) == BigBit32) {
+							cons.Print(Colors::Grey); cons.Print("\t\tImport by number: "); cons.Print(pINT->u1.AddressOfData& (~BigBit32)); cons.Print("\n");
+						}
+						else {
+							cons.Print(Colors::Grey); cons.Print("\t\t"); 
+							PIMAGE_IMPORT_BY_NAME pImportByName = (PIMAGE_IMPORT_BY_NAME)(lpFile + RvaToRaw(pINT->u1.AddressOfData));
+							cons.Print(pImportByName->Name); cons.Print("\n");
+						}
+						pINT++;
+					}
+				}
+			}
+		}
+		else {
+			ULONGLONG One = 1;
+			ULONGLONG BigBit64 = One << 63;
+			while (TRUE) {
+				if (pImportDescriptor->Name == 0) break;
+				cons.Print(Colors::Yellow); cons.Print("\t"); cons.Print((char*)(lpFile + RvaToRaw(pImportDescriptor->Name))); cons.Print(":\n");
+				if (pImportDescriptor->TimeDateStamp == -1 && pImportDescriptor->ForwarderChain == -1) {
+					pImportDescriptor++;
+					continue;
+				}
+				PIMAGE_THUNK_DATA64 pDataForINT = NULL;  PIMAGE_THUNK_DATA64 pDataForIAT = NULL;
+				if (pImportDescriptor->OriginalFirstThunk != 0) {
+					pDataForINT = (PIMAGE_THUNK_DATA64)(lpFile + RvaToRaw(pImportDescriptor->OriginalFirstThunk));
+				}
+
+				if (pImportDescriptor->FirstThunk != 0) {
+					pDataForIAT = (PIMAGE_THUNK_DATA64)(lpFile + RvaToRaw(pImportDescriptor->FirstThunk));
+				}
+
+				if (pDataForINT != NULL) {
+					while (TRUE) {
+						if (pDataForINT->u1.AddressOfData == 0) break;
+						if ((pDataForINT->u1.AddressOfData & BigBit64) == BigBit64) {
+							cons.Print(Colors::Grey);  cons.Print("\t\tImport By Number: ");
+							DWORD nSymbol = (pDataForINT->u1.AddressOfData) & (~BigBit64);
+							cons.Print("0x");  cons.Print(nSymbol); cons.Print("\n");
+						}
+						else {
+							PIMAGE_IMPORT_BY_NAME pImportByName = (PIMAGE_IMPORT_BY_NAME)(lpFile + RvaToRaw(pDataForINT->u1.AddressOfData));
+							cons.Print("\t\t");  cons.Print(Colors::Grey); cons.Print(pImportByName->Name); cons.Print("\n");
+						}
+						pDataForINT++;
+					}
+				}
+				else if (pDataForIAT != NULL) {
+					while (TRUE) {
+						if (pDataForIAT->u1.AddressOfData == 0) break;
+						PIMAGE_IMPORT_BY_NAME pImportByName = PIMAGE_IMPORT_BY_NAME(lpFile + RvaToRaw(pDataForIAT->u1.AddressOfData));
+						cons.Print("\t\t"); cons.Print(Colors::Grey); cons.Print(pImportByName->Name); cons.Print("\n");
+						pDataForIAT++;
+					}
+				}
+				cons.Print("\n");
+				pImportDescriptor++;
+			}
+			if (pOptionalHeader64->DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].Size != 0) {
+				cons.Print(Colors::Green); cons.Print("DELAY_IMPORT:\n");
+				for (ImgDelayDescr* pDelayDesc = (ImgDelayDescr*)(lpFile + RvaToRaw(pOptionalHeader64->DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].VirtualAddress)); pDelayDesc->rvaDLLName != 0; pDelayDesc++) {
+					cons.Print(Colors::Yellow); cons.Print("\t"); cons.Print((char*)(lpFile + RvaToRaw(pDelayDesc->rvaDLLName))); cons.Print(":\n");
+					IMAGE_THUNK_DATA64* pINT = (IMAGE_THUNK_DATA64*)(lpFile + RvaToRaw(pDelayDesc->rvaINT));
+					while (TRUE) {
+						if (pINT->u1.AddressOfData == 0) break;
+						if ((pINT->u1.AddressOfData & BigBit64) == BigBit64) {
+							cons.Print(Colors::Grey); cons.Print("\t\tImport by number: "); cons.Print(pINT->u1.AddressOfData & (~BigBit64)); cons.Print("\n");
+						}
+						else {
+							cons.Print(Colors::Grey); cons.Print("\t\t");
+							PIMAGE_IMPORT_BY_NAME pImportByName = (PIMAGE_IMPORT_BY_NAME)(lpFile + RvaToRaw(pINT->u1.AddressOfData));
+							cons.Print(pImportByName->Name); cons.Print("\n");
+						}
+						pINT++;
+					}
+				}
+			}
+			cons.Print(Colors::Red);  cons.Print("\n\n================================================================\n");
+		}
 	}
 };
